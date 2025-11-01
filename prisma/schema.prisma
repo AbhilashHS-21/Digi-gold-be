@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserType {
+  admin
+  customer
+}
+
+enum MetalType {
+  gold22K
+  gold24K
+  silver
+}
+
+enum KycStatus {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
+enum TransactionType {
+  ONLINE
+  OFFLINE
+}
+
+enum SipStatus {
+  ACTIVE
+  COMPLETED
+}
+
+//
+// USERS TABLE
+//
+model User {
+  id              String      @id @default(uuid())
+  username        String      @unique
+  email           String      @unique
+  password_hash   String
+  first_name      String
+  last_name       String
+  phone           String?
+  avatar_url      String?
+  user_type       UserType
+  gender          String?
+  dob             DateTime?
+  pincode         String?     @db.Char(6)
+  address1        String?
+  address2        String?
+  city            String?
+  state           String?
+  referral_code   String?
+  is_active       Boolean     @default(true)
+  is_verified     Boolean     @default(false)
+  last_login_at   DateTime?
+  created_at      DateTime    @default(now())
+  updated_at      DateTime    @updatedAt
+  created_by      String?
+  current_holdings Float?     @db.Double
+
+  // Relations
+  pan_details     PanDetail[]
+  bank_details    BankDetail[]
+  holdings        Holding[]
+  transactions    Transaction[]
+  fixed_sips      FixedSip[]
+  flexible_sips   FlexibleSip[]
+
+  @@index([created_by])
+}
+
+//
+// PAN DETAILS TABLE
+//
+model PanDetail {
+  id          String    @id @default(uuid())
+  user_id     String
+  full_name   String?
+  pan_number  String?
+  status      KycStatus
+  photo       Bytes?
+
+  // Relations
+  user        User      @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([pan_number])
+}
+
+//
+// BANK DETAILS TABLE
+//
+model BankDetail {
+  id          String    @id @default(uuid())
+  user_id     String
+  full_name   String?
+  account_no  String?
+  bank_name   String?
+  ifsc_code   String?
+  status      KycStatus
+
+  // Relations
+  user        User      @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([account_no])
+}
+
+//
+// HOLDINGS TABLE
+//
+model Holding {
+  id          String     @id @default(uuid())
+  user_id     String
+  amt         Decimal?    @db.Decimal(14,2)
+  metal_type  MetalType
+  qty         Decimal?    @db.Decimal(12,3)
+  updated_at  DateTime    @default(now())
+
+  // Relations
+  user        User        @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([metal_type])
+}
+
+//
+// TRANSACTIONS TABLE
+//
+model Transaction {
+  tr_id               String          @id @default(uuid())
+  user_id             String
+  transaction_amt     Decimal?        @db.Decimal(14,2)
+  transaction_datetime DateTime       @default(now())
+  transaction_type    TransactionType
+  utr_no              String?         @unique
+  transaction_status  String?         @default("SUCCESS")
+
+  // Relations
+  user                User            @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([transaction_datetime])
+}
+
+//
+// ADMIN PRICES TABLE
+//
+model AdminPrice {
+  id        String    @id @default(uuid())
+  gold24K   Decimal?  @db.Decimal(10,2)
+  gold22K   Decimal?  @db.Decimal(10,2)
+  silver    Decimal?  @db.Decimal(10,2)
+  updated_at DateTime @default(now())
+}
+
+//
+// SIP PLANS ADMIN TABLE
+//
+model SipPlanAdmin {
+  id           String     @id @default(uuid())
+  Yojna_name   String
+  metal_type   MetalType
+  range_amount Decimal?    @db.Decimal(14,2)
+  total_months Int?
+
+  fixed_sips   FixedSip[]
+}
+
+//
+// FIXED SIPS TABLE
+//
+model FixedSip {
+  id                String      @id @default(uuid())
+  user_id           String
+  sip_plan_id       String
+  total_amount_paid Decimal?    @db.Decimal(14,2)
+  months_paid       Int?
+  next_due_date     DateTime?
+  status            SipStatus   @default(ACTIVE)
+  created_at        DateTime    @default(now())
+
+  // Relations
+  user              User        @relation(fields: [user_id], references: [id])
+  sipPlanAdmin      SipPlanAdmin @relation(fields: [sip_plan_id], references: [id])
+
+  @@index([user_id])
+  @@index([next_due_date])
+}
+
+//
+// FLEXIBLE SIPS TABLE
+//
+model FlexibleSip {
+  id                String      @id @default(uuid())
+  user_id           String
+  total_amount_paid Decimal?    @db.Decimal(14,2)
+  metal_type        MetalType
+  months_paid       Int?
+  total_months      Int?        @default(12)
+  next_due_date     DateTime?
+  status            SipStatus   @default(ACTIVE)
+  created_at        DateTime    @default(now())
+
+  // Relations
+  user              User        @relation(fields: [user_id], references: [id])
+
+  @@index([user_id])
+  @@index([next_due_date])
+}
