@@ -4,10 +4,10 @@ import { authMiddleware } from "../middlewares/authMiddleware.js";
 import { ensureAdmin } from '../middlewares/adminMiddleware.js'
 
 const router = express.Router();
-router.post("/fixed/create", ensureAdmin, authMiddleware, createFixedSip);
+router.post("/fixed/create", authMiddleware, ensureAdmin, createFixedSip);
 
 router.post("/fixed/opt", authMiddleware, optFixedSip);
-router.post("/flexible/opt", authMiddleware, createFlexibleSip);
+router.post("/flexible/create", authMiddleware, createFlexibleSip);
 router.get("/", authMiddleware, getUserSips);
 
 export default router;

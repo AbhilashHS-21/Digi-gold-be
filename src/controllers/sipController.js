@@ -59,12 +59,12 @@ export const getUserSips = async (req, res) => {
     const userId = req.user.id;
     const sipsFixed = await prisma.fixedSip.findMany({
       where: { user_id: userId },
-      include: { sipPlanAdmin: true },
+      // include: { sipPlanAdmin: true },
     });
-    const sipsFlexible = await prisma.fixedSip.findMany({
+    const sipsFlexible = await prisma.flexibleSip.findMany({
       where: { user_id: userId },
     });
-    res.json(sipsFixed, sipsFlexible);
+    res.json({sipsFixed: sipsFixed, sipsFlexible: sipsFlexible});
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

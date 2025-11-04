@@ -6,7 +6,15 @@ export const getHoldings = async (req, res) => {
     const holdings = await prisma.holding.findMany({
       where: { user_id: userId },
     });
-    res.json(holdings);
+    const sipsFixed = await prisma.fixedSip.findMany({
+      where: { user_id: userId },
+      // include: { total_amount_paid: true },
+    });
+    const sipsFlexible = await prisma.flexibleSip.findMany({
+      where: { user_id: userId },
+      // include: { total_amount_paid: true },
+    });
+    res.json({holdings, sipsFixed, sipsFlexible});
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
