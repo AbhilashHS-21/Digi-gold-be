@@ -144,6 +144,20 @@ export const getMyKyc = async (req, res) => {
     const bank = await prisma.bankDetail.findFirst({
       where: { user_id: userId },
     });
+    const profile = await prisma.user.findFirst({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        phone: true,
+        current_holdings: true,
+        // exclude password_hash by simply not including it
+      },
+    });
+
 
     const result = {};
 
@@ -154,7 +168,7 @@ export const getMyKyc = async (req, res) => {
         id: pan.id,
         status: pan.status,
         pan_masked: maskPAN(panPlain),
-        full_name: null, // do not leak PII here — show only on explicit request
+        full_name: pan.full_name, // do not leak PII here — show only on explicit request
         createdAt: pan.createdAt ?? null,
       };
     } else {
@@ -167,12 +181,18 @@ export const getMyKyc = async (req, res) => {
         id: bank.id,
         status: bank.status,
         account_masked: maskAccount(accPlain),
+        full_name: bank.full_name,
         bank_name: bank.bank_name,
         ifsc_code: bank.ifsc_code,
         createdAt: bank.createdAt ?? null,
       };
     } else {
       result.bank = null;
+    }
+    if(profile) {
+      result.profile = profile;
+    } else {
+      result.profile = null;
     }
 
     return res.json(result);

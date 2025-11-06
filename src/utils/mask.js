@@ -1,10 +1,10 @@
 export function maskPAN(pan) {
   if (!pan) return null;
-  // typical PAN: 10 characters — show first 3 and last 2
+  // typical PAN: 10 characters — show first 2 and last 2
   if (pan.length <= 5) return "*****";
-  const first = pan.slice(0, 3);
+  const first = pan.slice(0, 2);
   const last = pan.slice(-2);
-  return `${first}*****${last}`;
+  return `${first}******${last}`;
 }
 
 export function maskAccount(accountNo) {

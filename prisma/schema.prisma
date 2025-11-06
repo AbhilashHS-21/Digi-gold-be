@@ -27,6 +27,7 @@ enum KycStatus {
 enum TransactionType {
   ONLINE
   OFFLINE
+  SIP
 }
 
 enum SipStatus {
@@ -141,6 +142,8 @@ model Transaction {
   utr_no              String?         @unique
   transaction_status  String?         @default("SUCCESS")
 
+  sip_id             String?
+  sip_type           String?  // 'FIXED' | 'FLEXIBLE'
   // Relations
   user                User            @relation(fields: [user_id], references: [id])
 
