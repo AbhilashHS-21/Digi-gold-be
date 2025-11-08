@@ -105,3 +105,21 @@ export const getUserSips = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+export const getAllUsersSips = async (req, res) => {
+  try {
+    const [sipsFixed, sipsFlexible] = await Promise.all([
+      prisma.fixedSip.findMany({
+        include: { sipPlanAdmin: true },
+        orderBy: { created_at: "desc" },
+      }),
+      prisma.flexibleSip.findMany({
+        orderBy: { created_at: "desc" },
+      }),
+    ]);
+
+    res.json({ sipsFixed, sipsFlexible });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
