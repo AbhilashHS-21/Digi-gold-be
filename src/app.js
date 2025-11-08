@@ -8,6 +8,7 @@ import sipRoutes from "./routes/sipRoutes.js";
 import adminPriceRoutes from "./routes/adminPriceRoutes.js"
 import kycRoutes from "./routes/kycRoutes.js"
 import sipPaymentsRoutes from "./routes/sipPaymentRoutes.js"
+import userRoutes from "./routes/userRoutes.js"
 
 dotenv.config();
 
@@ -27,5 +28,7 @@ app.use("/api/sip", sipRoutes);
 app.use("/api/price", adminPriceRoutes);
 app.use("/api/kyc", kycRoutes);
 app.use("/api/sip/payments", sipPaymentsRoutes);
+
+app.use("/api/user", userRoutes);
 
 export default app;

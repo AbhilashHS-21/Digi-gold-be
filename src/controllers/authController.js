@@ -4,7 +4,7 @@ import { generateToken } from "../utils/jwt.js";
 
 export const register = async (req, res) => {
   try {
-    const { username, email, password, first_name, last_name, user_type } =
+    const { username, email, password, first_name, last_name } =
       req.body;
 
     const exists = await prisma.user.findFirst({
@@ -20,7 +20,7 @@ export const register = async (req, res) => {
         password_hash: hashed,
         first_name,
         last_name,
-        user_type,
+        user_type : 'customer',
       },
     });
 

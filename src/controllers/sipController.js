@@ -1,5 +1,6 @@
 import { SipStatus } from "@prisma/client";
 import prisma from "../config/db.js";
+import { addMonths } from "date-fns";
 
 export const createFixedSip = async (req, res) => {
   try {
@@ -21,11 +22,11 @@ export const optFixedSip = async (req, res) => {
     const { sip_plan_id } = req.body;
 
     // Check if plan exists
-    const plan = await prisma.sipPlans_Admin.findUnique({ where: { id: sip_plan_id } });
+    const plan = await prisma.sipPlanAdmin.findUnique({ where: { id: sip_plan_id } });
     if (!plan) return res.status(404).json({ message: "Invalid SIP plan" });
 
     // Prevent duplicate active SIP of same plan
-    const existing = await prisma.fixed_sips.findFirst({
+    const existing = await prisma.fixedSip.findFirst({
       where: { user_id: userId, sip_plan_id, status: "ACTIVE" },
     });
     if (existing)
@@ -67,7 +68,7 @@ export const createFlexibleSip = async (req, res) => {
 
     const nextDue = addMonths(new Date(), 1);
 
-    const sip = await prisma.fixedSip.create({
+    const sip = await prisma.flexibleSip.create({
       data: {
         user_id: userId,
         metal_type,
@@ -78,7 +79,7 @@ export const createFlexibleSip = async (req, res) => {
         status: SipStatus.ACTIVE },
     });
 
-    res.status(201).json({ message: "Fixed SIP created", sip });
+    res.status(201).json({ message: "Flexible SIP created", sip });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
