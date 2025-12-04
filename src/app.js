@@ -10,6 +10,8 @@ import kycRoutes from "./routes/kycRoutes.js"
 import sipPaymentsRoutes from "./routes/sipPaymentRoutes.js"
 import userRoutes from "./routes/userRoutes.js"
 import transactionRoutes from "./routes/transactionRoutes.js"
+import { errorHandler } from "./middlewares/errorMiddleware.js";
+import { securityHeaders, limiter } from "./middlewares/securityMiddleware.js";
 
 dotenv.config();
 
@@ -19,6 +21,11 @@ const corsOptions = {
 };
 
 const app = express();
+
+// Security Middleware
+app.use(securityHeaders);
+app.use(limiter);
+
 app.use(cors(corsOptions));
 app.use(express.json());
 
@@ -32,5 +39,8 @@ app.use("/api/sip/payments", sipPaymentsRoutes);
 app.use("/api/transactions", transactionRoutes);
 
 app.use("/api/user", userRoutes);
+
+// Global Error Handler
+app.use(errorHandler);
 
 export default app;

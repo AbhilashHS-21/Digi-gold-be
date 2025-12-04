@@ -81,3 +81,39 @@ export const update = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+export const getUserDetails = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        first_name: true,
+        last_name: true,
+        phone: true,
+        gender: true,
+        dob: true,
+        pincode: true,
+        address1: true,
+        address2: true,
+        city: true,
+        state: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    res.status(200).json({ user });
+  } catch (err) {
+    console.error("Error getting user details:", err);
+    res.status(500).json({ message: err.message });
+  }
+}

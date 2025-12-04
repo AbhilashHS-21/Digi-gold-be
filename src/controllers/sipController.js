@@ -60,11 +60,11 @@ export const createFlexibleSip = async (req, res) => {
     const { metal_type, total_months } = req.body;
 
     // Prevent multiple active SIPs of same metal
-    const existing = await prisma.flexibleSip.findFirst({
-      where: { user_id: userId, metal_type, status: "ACTIVE" },
-    });
-    if (existing)
-      return res.status(409).json({ message: "You already have an active flexible SIP for this metal." });
+    // const existing = await prisma.flexibleSip.findFirst({
+    //   where: { user_id: userId, metal_type, status: "ACTIVE" },
+    // });
+    // if (existing)
+    //   return res.status(409).json({ message: "You already have an active flexible SIP for this metal." });
 
     const nextDue = addMonths(new Date(), 1);
 
