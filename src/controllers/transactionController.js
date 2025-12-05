@@ -41,6 +41,7 @@ export const paySipInstallment = async (req, res) => {
         sip_id,
         sip_type,
         transaction_status: "PENDING",
+        category: "DEBIT",
       },
     });
 
@@ -150,7 +151,7 @@ export const getAllTransactions = async (req, res) => {
 export const addTransaction = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { amount, utr_no, transaction_type } = req.body;
+    const { amount, utr_no, transaction_type, category } = req.body;
 
     const NewTransaction = await prisma.transaction.create({
       data: {
@@ -159,6 +160,7 @@ export const addTransaction = async (req, res) => {
         transaction_type,
         utr_no,
         transaction_status: "SUCCESS",
+        category: category || "DEBIT",
       },
     });
     res.status(201).json({

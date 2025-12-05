@@ -10,6 +10,7 @@ import kycRoutes from "./routes/kycRoutes.js"
 import sipPaymentsRoutes from "./routes/sipPaymentRoutes.js"
 import userRoutes from "./routes/userRoutes.js"
 import transactionRoutes from "./routes/transactionRoutes.js"
+import notificationRoutes from "./routes/notificationRoutes.js"
 import { errorHandler } from "./middlewares/errorMiddleware.js";
 import { securityHeaders, limiter } from "./middlewares/securityMiddleware.js";
 
@@ -37,6 +38,7 @@ app.use("/api/price", adminPriceRoutes);
 app.use("/api/kyc", kycRoutes);
 app.use("/api/sip/payments", sipPaymentsRoutes);
 app.use("/api/transactions", transactionRoutes);
+app.use("/api/notifications", notificationRoutes);
 
 app.use("/api/user", userRoutes);
 
