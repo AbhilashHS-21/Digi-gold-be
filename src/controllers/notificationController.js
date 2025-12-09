@@ -1,4 +1,5 @@
 import prisma from "../config/db.js";
+import { sendEmail } from "../utils/emailService.js";
 
 // Get all notifications for the logged-in user
 export const getUserNotifications = async (req, res) => {
@@ -58,7 +59,7 @@ export const markAllRead = async (req, res) => {
 
 export const createNotification = async (req, res) => {
     try {
-        const { user_id, title, message, type } = req.body;
+        const { user_id, title, message, type, email } = req.body;
 
         const notification = await prisma.notification.create({
             data: {
@@ -69,6 +70,21 @@ export const createNotification = async (req, res) => {
             },
         });
 
+        // Send email notification
+        // Fetch user email to send notification
+        const user = await prisma.user.findUnique({
+            where: { id: user_id },
+            select: { email: true }
+        });
+
+        if (user && user.email) {
+            await sendEmail(
+                email,
+                title, // Subject
+                message, // Text body
+                `<p>${message}</p>` // HTML body
+            );
+        }
         res.json(notification);
     } catch (err) {
         res.status(500).json({ message: err.message });

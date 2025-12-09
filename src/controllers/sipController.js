@@ -16,6 +16,16 @@ export const createFixedSip = async (req, res) => {
   }
 }
 
+export const getFixedSips = async (req, res) => {
+  try {
+    const fixedSips = await prisma.sipPlanAdmin.findMany({
+    });
+    res.json(fixedSips);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+}
+
 export const optFixedSip = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -76,7 +86,8 @@ export const createFlexibleSip = async (req, res) => {
         months_paid: 0,
         total_months,
         next_due_date: nextDue,
-        status: SipStatus.ACTIVE },
+        status: SipStatus.ACTIVE
+      },
     });
 
     res.status(201).json({ message: "Flexible SIP created", sip });
@@ -88,7 +99,7 @@ export const createFlexibleSip = async (req, res) => {
 export const getUserSips = async (req, res) => {
   try {
     const userId = req.user.id;
-     const [sipsFixed, sipsFlexible] = await Promise.all([
+    const [sipsFixed, sipsFlexible] = await Promise.all([
       prisma.fixedSip.findMany({
         where: { user_id: userId },
         include: { sipPlanAdmin: true },
@@ -100,7 +111,7 @@ export const getUserSips = async (req, res) => {
       }),
     ]);
 
-    res.json({sipsFixed, sipsFlexible});
+    res.json({ sipsFixed, sipsFlexible });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

@@ -5,11 +5,11 @@ import {
     markAllRead,
     createNotification,
 } from "../controllers/notificationController.js";
-import { authenticateUser } from "../middlewares/authMiddleware.js"; // Assuming you have this
+import { authMiddleware } from "../middlewares/authMiddleware.js"; // Assuming you have this
 
 const router = express.Router();
 
-router.use(authenticateUser);
+router.use(authMiddleware);
 
 router.get("/", getUserNotifications);
 router.put("/:id/read", markNotificationRead);
