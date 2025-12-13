@@ -28,11 +28,14 @@ enum TransactionType {
   ONLINE
   OFFLINE
   SIP
+  SIP_BONUS
+  SIP_CONVERSION
 }
 
 enum SipStatus {
   ACTIVE
   COMPLETED
+  CONVERTED
 }
 
 enum TransactionCategory {
@@ -149,10 +152,12 @@ model Transaction {
   transaction_status   String?             @default("SUCCESS")
   category             TransactionCategory @default(DEBIT)
 
-  sip_id   String?
-  sip_type String? // 'FIXED' | 'FLEXIBLE'
+  sip_id         String?
+  sip_type       String? // 'FIXED' | 'FLEXIBLE'
+  otp            String?
+  otp_expires_at DateTime?
   // Relations
-  user     User    @relation(fields: [user_id], references: [id])
+  user           User      @relation(fields: [user_id], references: [id])
 
   @@index([user_id])
   @@index([transaction_datetime])

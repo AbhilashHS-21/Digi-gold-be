@@ -1,10 +1,11 @@
 import prisma from "../config/db.js";
-import { addMonths } from "date-fns";
+import { addMonths, addMinutes } from "date-fns";
+import { sendEmail } from "../utils/emailService.js";
 
 export const sellGold = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { metal_type, quantity } = req.body;
+    const { metal_type, quantity, utr_no, transaction_type } = req.body;
     console.log(userId, metal_type, quantity);
 
     if (!quantity || quantity <= 0) {
@@ -57,10 +58,10 @@ export const sellGold = async (req, res) => {
         data: {
           user_id: userId,
           transaction_amt: creditAmount,
-          transaction_type: "ONLINE", // Or a specific type if needed
+          transaction_type: transaction_type, // Or a specific type if needed
           transaction_status: "SUCCESS",
-          category: "DEBIT",
-          utr_no: `SELL-${Date.now()}`, // Generate a unique ref
+          category: "CREDIT",
+          utr_no: utr_no, // Generate a unique ref
         },
       });
 
@@ -71,7 +72,7 @@ export const sellGold = async (req, res) => {
   } catch (err) {
     console.error(err);
     if (err.message === "Insufficient holdings") {
-      return res.status(400).json({ message: err.message });
+      return res.status(400).json({ message: "Insufficient holdings" });
     }
     res.status(500).json({ message: "Sell failed", error: err.message });
   }
@@ -117,7 +118,7 @@ export const paySipInstallment = async (req, res) => {
         sip_id,
         sip_type,
         transaction_status: "PENDING",
-        category: "DEBIT",
+        category: "CREDIT",
       },
     });
 
@@ -229,6 +230,60 @@ export const addTransaction = async (req, res) => {
     const userId = req.user.id;
     const { amount, utr_no, transaction_type, category } = req.body;
 
+    if (transaction_type === "OFFLINE") {
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      const otp_expires_at = addMinutes(new Date(), 15);
+
+      // Find Admin
+      const admin = await prisma.user.findFirst({
+        where: { user_type: "admin" },
+      });
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true }
+      });
+
+      if (!admin || !admin.email) {
+        return res.status(500).json({ message: "Admin contact not found" });
+      }
+
+      // Send OTP to Admin
+      await sendEmail(
+        admin.email,
+        "Offline Payment OTP Verification",
+        `User ${user.username} requested offline payment of ${amount}. OTP: ${otp}`,
+        `<p>User <strong>${user.username}</strong> requested offline payment of <strong>${amount}</strong>.</p><h3>OTP: ${otp}</h3>`
+      );
+
+      await prisma.notification.create({
+        data: {
+          user_id: admin.id,
+          title: "Offline Payment OTP Verification",
+          message: `User ${user.username} requested offline payment of ${amount}. OTP: ${otp}`,
+          type: "OTP",
+        },
+      });
+
+      const NewTransaction = await prisma.transaction.create({
+        data: {
+          user_id: userId,
+          transaction_amt: amount,
+          transaction_type,
+          utr_no,
+          transaction_status: "PENDING",
+          category: category || "CREDIT",
+          otp,
+          otp_expires_at,
+        },
+      });
+
+      return res.status(201).json({
+        message: "Offline payment initiated. Ask Admin for OTP.",
+        tr_id: NewTransaction.tr_id,
+      });
+    }
+
     const NewTransaction = await prisma.transaction.create({
       data: {
         user_id: userId,
@@ -236,7 +291,7 @@ export const addTransaction = async (req, res) => {
         transaction_type,
         utr_no,
         transaction_status: "SUCCESS",
-        category: category || "DEBIT",
+        category: category || "CREDIT",
       },
     });
     res.status(201).json({
@@ -248,3 +303,50 @@ export const addTransaction = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 }
+
+export const verifyOfflineTransaction = async (req, res) => {
+  try {
+    const { tr_id, otp } = req.body;
+
+    const transaction = await prisma.transaction.findUnique({
+      where: { tr_id },
+    });
+
+    if (!transaction) {
+      return res.status(404).json({ message: "Transaction not found" });
+    }
+
+    if (transaction.transaction_type !== "OFFLINE") {
+      return res.status(400).json({ message: "Not an offline transaction" });
+    }
+
+    if (transaction.transaction_status === "SUCCESS") {
+      return res.status(400).json({ message: "Transaction already verified" });
+    }
+
+    if (transaction.otp !== otp) {
+      return res.status(400).json({ message: "Invalid OTP" });
+    }
+
+    if (new Date() > new Date(transaction.otp_expires_at)) {
+      return res.status(400).json({ message: "OTP expired" });
+    }
+
+    const updatedTransaction = await prisma.transaction.update({
+      where: { tr_id },
+      data: {
+        transaction_status: "SUCCESS",
+        otp: null, // Clear OTP after usage for security
+        otp_expires_at: null
+      },
+    });
+
+    res.status(200).json({
+      message: "Offline transaction verified successfully",
+      transaction: updatedTransaction,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: err.message });
+  }
+};
