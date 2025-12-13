@@ -14,7 +14,7 @@ export const getHoldings = async (req, res) => {
       where: { user_id: userId },
       // include: { total_amount_paid: true },
     });
-    res.json({holdings, sipsFixed, sipsFlexible});
+    res.json({ holdings, sipsFixed, sipsFlexible });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

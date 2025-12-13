@@ -1,6 +1,82 @@
 import prisma from "../config/db.js";
 import { addMonths } from "date-fns";
 
+export const sellGold = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { metal_type, quantity } = req.body;
+    console.log(userId, metal_type, quantity);
+
+    if (!quantity || quantity <= 0) {
+      return res.status(400).json({ message: "Invalid quantity" });
+    }
+
+    // 1. Fetch latest price
+    const latestPrice = await prisma.adminPrice.findFirst({
+      orderBy: { updated_at: "desc" },
+    });
+
+    if (!latestPrice) {
+      return res.status(500).json({ message: "Current prices unavailable" });
+    }
+
+    const currentPrice = latestPrice[metal_type];
+    if (!currentPrice) {
+      return res.status(400).json({ message: "Invalid metal type" });
+    }
+
+    // 2. Transaction for atomicity
+    const result = await prisma.$transaction(async (tx) => {
+      // Check holdings
+      const holding = await tx.holding.findFirst({
+        where: {
+          user_id: userId,
+          metal_type: metal_type,
+        },
+      });
+      console.log(holding);
+
+      if (!holding || Number(holding.qty) < Number(quantity)) {
+        throw new Error("Insufficient holdings");
+      }
+
+      // Calculate credit amount
+      const creditAmount = Number(currentPrice) * Number(quantity);
+
+      // Debit Holdings
+      await tx.holding.update({
+        where: { id: holding.id },
+        data: {
+          qty: { decrement: quantity },
+          amt: { decrement: (Number(holding.amt) / Number(holding.qty)) * Number(quantity) }, // Proportional reduction
+        },
+      });
+
+      // Create Credit Transaction
+      const transaction = await tx.transaction.create({
+        data: {
+          user_id: userId,
+          transaction_amt: creditAmount,
+          transaction_type: "ONLINE", // Or a specific type if needed
+          transaction_status: "SUCCESS",
+          category: "DEBIT",
+          utr_no: `SELL-${Date.now()}`, // Generate a unique ref
+        },
+      });
+
+      return transaction;
+    });
+
+    res.status(200).json({ message: "Sell successful", transaction: result });
+  } catch (err) {
+    console.error(err);
+    if (err.message === "Insufficient holdings") {
+      return res.status(400).json({ message: err.message });
+    }
+    res.status(500).json({ message: "Sell failed", error: err.message });
+  }
+};
+
 // SIP payments
 export const paySipInstallment = async (req, res) => {
   const userId = req.user.id;

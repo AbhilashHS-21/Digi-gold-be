@@ -117,3 +117,59 @@ export const getUserDetails = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 }
+
+export const userCurrentHoldings = async (req, res) => {
+  try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized user",
+      });
+    }
+
+    const userHoldings = await prisma.$queryRaw`
+      SELECT 
+        SUM(f.total_amount_paid) AS amount,
+        'fixedsip' AS type,
+        s.metal_type
+      FROM FixedSip AS f
+      JOIN sipplanadmin AS s ON s.id = f.sip_plan_id
+      WHERE f.user_id = ${userId}
+      GROUP BY s.metal_type
+
+      UNION ALL
+
+      SELECT 
+        SUM(fs.total_amount_paid) AS amount,
+        'flexiblesip' AS type,
+        fs.metal_type
+      FROM FlexibleSip AS fs
+      WHERE fs.user_id = ${userId}
+      GROUP BY fs.metal_type
+
+      UNION ALL
+
+      SELECT 
+        SUM(h.amt) AS amount,
+        'holding' AS type,
+        'money' AS metal_type
+      FROM Holding AS h
+      WHERE h.user_id = ${userId};
+    `;
+
+    return res.status(200).json({
+      success: true,
+      data: userHoldings,
+    });
+  } catch (err) {
+    console.error("Error fetching user holdings:", err);
+
+    return res.status(500).json({
+      success: false,
+      message: "Internal server error",
+      error: err.message,
+    });
+  }
+};
