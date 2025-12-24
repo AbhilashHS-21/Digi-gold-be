@@ -24,8 +24,6 @@ export const exportData = async (req, res) => {
             { header: 'DoB', key: 'dob', width: 15 },
             { header: 'Status', key: 'status', width: 10 },
             { header: 'Created At', key: 'created_at', width: 20 },
-            { header: 'PAN', key: 'pan', width: 15 },
-            { header: 'Bank Account', key: 'bank_account', width: 20 },
         ];
 
         users.forEach((user) => {
@@ -39,8 +37,6 @@ export const exportData = async (req, res) => {
                 dob: user.dob ? user.dob.toISOString().split('T')[0] : '',
                 status: user.is_active ? 'Active' : 'Inactive',
                 created_at: user.created_at,
-                pan: user.pan_details?.[0]?.pan_number || 'N/A',
-                bank_account: user.bank_details?.[0]?.account_no || 'N/A',
             });
         });
 

@@ -12,7 +12,6 @@ export const ensureAdmin = async (req, res, next) => {
       user_type: true, // Selects only the 'email' column
     },
   });
-  console.log(dbuser);
 
   if (dbuser.user_type !== "admin") {
     return res.status(403).json({ message: "Requires admin role" });

@@ -324,8 +324,25 @@ export const addTransaction = async (req, res) => {
               total_amount_paid: newTotalAmount,
               status: newMonthsPaid >= totalMonths ? "COMPLETED" : "ACTIVE",
               next_due_date: newMonthsPaid >= totalMonths ? null : addMonths(new Date(), 1),
+              has_delayed_payment: sip.has_delayed_payment || new Date() > new Date(sip.next_due_date),
             },
           });
+
+          // Notify Admin for 12th month bonus
+          if (newMonthsPaid === 11 && totalMonths === 12) {
+            const admin = await tx.user.findFirst({ where: { user_type: "admin" } });
+            if (admin) {
+              const hasDelayed = updatedSip.has_delayed_payment;
+              await tx.notification.create({
+                data: {
+                  user_id: admin.id,
+                  title: "SIP Bonus Payment Due",
+                  message: `User ${userId} has completed 11 months of Fixed SIP ${sip_id}. Please pay the 12th month bonus. User Delayed Payment: ${hasDelayed ? "Yes" : "No"}`,
+                  type: "SIP_BONUS",
+                },
+              });
+            }
+          }
         } else {
           const newMonthsPaid = sip.months_paid + 1;
           const newTotalAmount = Number(sip.total_amount_paid) + Number(amount);
@@ -420,10 +437,32 @@ export const verifyOfflineTransaction = async (req, res) => {
             const newMonths = sip.months_paid + 1;
             const newTotal = Number(sip.total_amount_paid) + Number(transaction_amt);
             const isComp = newMonths >= sip.sipPlanAdmin.total_months;
-            await tx.fixedSip.update({
+            const isDelayed = sip.has_delayed_payment || new Date() > new Date(sip.next_due_date);
+
+            const updatedSip = await tx.fixedSip.update({
               where: { id: sip_id },
-              data: { months_paid: newMonths, total_amount_paid: newTotal, status: isComp ? "COMPLETED" : "ACTIVE" }
+              data: {
+                months_paid: newMonths,
+                total_amount_paid: newTotal,
+                status: isComp ? "COMPLETED" : "ACTIVE",
+                has_delayed_payment: isDelayed
+              }
             });
+
+            // Notify Admin for 12th month bonus
+            if (newMonths === 11 && sip.sipPlanAdmin.total_months === 12) {
+              const admin = await tx.user.findFirst({ where: { user_type: "admin" } });
+              if (admin) {
+                await tx.notification.create({
+                  data: {
+                    user_id: admin.id,
+                    title: "SIP Bonus Payment Due",
+                    message: `User ${transaction.user_id} has completed 11 months of Fixed SIP ${sip_id}. Please pay the 12th month bonus. User Delayed Payment: ${isDelayed ? "Yes" : "No"}`,
+                    type: "SIP_BONUS",
+                  },
+                });
+              }
+            }
           }
         } else {
           sip = await tx.flexibleSip.findUnique({ where: { id: sip_id } });

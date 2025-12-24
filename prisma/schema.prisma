@@ -36,6 +36,7 @@ enum SipStatus {
   ACTIVE
   COMPLETED
   CONVERTED
+  SETTLED
 }
 
 enum TransactionCategory {
@@ -193,14 +194,15 @@ model SipPlanAdmin {
 // FIXED SIPS TABLE
 //
 model FixedSip {
-  id                String    @id @default(uuid())
-  user_id           String
-  sip_plan_id       String
-  total_amount_paid Decimal?  @db.Decimal(14, 2)
-  months_paid       Int?
-  next_due_date     DateTime?
-  status            SipStatus @default(ACTIVE)
-  created_at        DateTime  @default(now())
+  id                  String    @id @default(uuid())
+  user_id             String
+  sip_plan_id         String
+  total_amount_paid   Decimal?  @db.Decimal(14, 2)
+  months_paid         Int?
+  next_due_date       DateTime?
+  status              SipStatus @default(ACTIVE)
+  has_delayed_payment Boolean   @default(false)
+  created_at          DateTime  @default(now())
 
   // Relations
   user         User         @relation(fields: [user_id], references: [id])

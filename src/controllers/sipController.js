@@ -248,3 +248,95 @@ export const convertSipToHolding = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+export const settleSIP = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { sip_id, sip_type } = req.body; // sip_type: 'FIXED' | 'FLEXIBLE'
+
+    if (!["FIXED", "FLEXIBLE"].includes(sip_type)) {
+      return res.status(400).json({ message: "Invalid SIP type" });
+    }
+
+    // 1. Fetch latest price
+    const latestPrice = await prisma.adminPrice.findFirst({
+      orderBy: { updated_at: "desc" },
+    });
+
+    if (!latestPrice) {
+      return res.status(500).json({ message: "Current prices unavailable" });
+    }
+
+    let sip;
+    let goldQty;
+    await prisma.$transaction(async (tx) => {
+      let metalType;
+
+      // 2. Fetch SIP & Validate
+      if (sip_type === "FIXED") {
+        sip = await tx.fixedSip.findUnique({
+          where: { id: sip_id },
+          include: { sipPlanAdmin: true }
+        });
+        if (!sip) throw new Error("SIP not found");
+        metalType = sip.sipPlanAdmin.metal_type;
+      } else {
+        sip = await tx.flexibleSip.findUnique({ where: { id: sip_id } });
+        if (!sip) throw new Error("SIP not found");
+        metalType = sip.metal_type;
+      }
+      const adminUser = await prisma.user.findUnique({ where: { id: userId } });
+      if (!adminUser) throw new Error("User not found");
+      if (adminUser.user_type !== "admin") throw new Error("Unauthorized");
+      if (sip.status === "SETTLED") throw new Error("SIP_ALREADY_SETTLED");
+      if (sip.status !== "COMPLETED") throw new Error("SIP_NOT_MATURE");
+      // Check if already converted? Schema enum handles status, so if it is CONVERTED it won't be COMPLETED.
+
+      const currentPrice = Number(latestPrice[metalType]);
+      if (!currentPrice) throw new Error("Price not found for metal");
+
+      // 3. Calculate Gold Quantity to credit
+      // user has total_amount_paid. We buy gold at current rate.
+      goldQty = Number(sip.total_amount_paid) / currentPrice;
+
+      // 4. Update SIP status
+      if (sip_type === "FIXED") {
+        await tx.fixedSip.update({
+          where: { id: sip_id },
+          data: { status: "SETTLED" }
+        });
+      } else {
+        await tx.flexibleSip.update({
+          where: { id: sip_id },
+          data: { status: "SETTLED" }
+        });
+      }
+    });
+
+    await prisma.notification.create({
+      data: {
+        user_id: sip.user_id,
+        title: "SIP Settled",
+        message: (sip_type === "FIXED") ?
+          `SIP ${sip_id} Settled. Plan: ${sip.sipPlanAdmin.Yojna_name}, Metal: ${sip.sipPlanAdmin.metal_type}, Paid: ${sip.total_amount_paid}, Status: SETTLED, Gold: ${goldQty}`
+          :
+          `SIP ${sip_id} Settled. Metal: ${sip.metal_type}, Paid: ${sip.total_amount_paid}, Status: SETTLED, Gold: ${goldQty}`,
+        type: "SIP",
+      },
+    });
+    res.status(200).json({ message: "SIP Settled successfully" });
+
+  } catch (err) {
+    if (err.message === "SIP_ALREADY_SETTLED") {
+      return res.status(200).json({ message: "SIP is already settled" });
+    }
+    if (err.message === "SIP_NOT_MATURE") {
+      return res.status(200).json({ message: "SIP is not mature yet" });
+    }
+    // Check if headers are already sent to avoid crashing
+    if (!res.headersSent) {
+      console.error(err);
+      res.status(500).json({ message: err.message });
+    }
+  }
+};
