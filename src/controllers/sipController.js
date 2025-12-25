@@ -340,3 +340,23 @@ export const settleSIP = async (req, res) => {
     }
   }
 };
+
+export const getAllUsersCompletedAndSettledSips = async (req, res) => {
+  try {
+    const [sipsFixed, sipsFlexible] = await Promise.all([
+      prisma.fixedSip.findMany({
+        where: { status: { in: ["SETTLED", "COMPLETED"] } },
+        include: { sipPlanAdmin: true },
+        orderBy: { created_at: "desc" },
+      }),
+      prisma.flexibleSip.findMany({
+        where: { status: { in: ["SETTLED", "COMPLETED"] } },
+        orderBy: { created_at: "desc" },
+      }),
+    ]);
+
+    res.json({ sipsFixed, sipsFlexible });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};

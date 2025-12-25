@@ -3,6 +3,7 @@ import { exportData } from '../controllers/adminController.js';
 import { ensureAdmin } from '../middlewares/adminMiddleware.js';
 import { settleSIP } from '../controllers/sipController.js';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
+import { getAllUsersCompletedAndSettledSips } from '../controllers/sipController.js';
 
 const router = express.Router();
 
@@ -11,5 +12,8 @@ router.get('/export-excel', authMiddleware, ensureAdmin, exportData);
 
 // POST /api/admin/settlements
 router.post('/settlements', authMiddleware, ensureAdmin, settleSIP);
+
+// GET /api/admin/completed-settled-sips
+router.get('/completed-settled-sips', authMiddleware, ensureAdmin, getAllUsersCompletedAndSettledSips);
 
 export default router;

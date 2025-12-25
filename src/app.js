@@ -15,6 +15,7 @@ import notificationRoutes from "./routes/notificationRoutes.js"
 import adminRoutes from "./routes/adminRoutes.js"
 import { errorHandler } from "./middlewares/errorMiddleware.js";
 import { securityHeaders, limiter } from "./middlewares/securityMiddleware.js";
+import razorpayRoutes from "./routes/razorpay.js";
 
 dotenv.config();
 
@@ -51,6 +52,8 @@ app.use("/api/transactions", transactionRoutes);
 app.use("/api/notifications", notificationRoutes);
 
 app.use("/api/user", userRoutes);
+
+app.use("/api/razorpay", razorpayRoutes);
 
 // Global Error Handler
 app.use(errorHandler);
