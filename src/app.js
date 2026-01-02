@@ -1,3 +1,4 @@
+// server.js or app.js
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
@@ -6,16 +7,17 @@ import session from "express-session";
 import authRoutes from "./routes/authRoutes.js";
 import holdingsRoutes from "./routes/holdingsRoutes.js";
 import sipRoutes from "./routes/sipRoutes.js";
-import adminPriceRoutes from "./routes/adminPriceRoutes.js"
-import kycRoutes from "./routes/kycRoutes.js"
-import sipPaymentsRoutes from "./routes/sipPaymentRoutes.js"
-import userRoutes from "./routes/userRoutes.js"
-import transactionRoutes from "./routes/transactionRoutes.js"
-import notificationRoutes from "./routes/notificationRoutes.js"
-import adminRoutes from "./routes/adminRoutes.js"
+import adminPriceRoutes from "./routes/adminPriceRoutes.js";
+import kycRoutes from "./routes/kycRoutes.js";
+import sipPaymentsRoutes from "./routes/sipPaymentRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
+import transactionRoutes from "./routes/transactionRoutes.js";
+import notificationRoutes from "./routes/notificationRoutes.js";
+import adminRoutes from "./routes/adminRoutes.js";
 import { errorHandler } from "./middlewares/errorMiddleware.js";
 import { securityHeaders, limiter } from "./middlewares/securityMiddleware.js";
 import razorpayRoutes from "./routes/razorpay.js";
+import marketStatusRoutes from "./routes/marketStatusRoutes.js"; // Add this
 
 dotenv.config();
 
@@ -50,9 +52,8 @@ app.use("/api/kyc", kycRoutes);
 app.use("/api/sip/payments", sipPaymentsRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/notifications", notificationRoutes);
-
+app.use("/api/market-status", marketStatusRoutes); // Add this
 app.use("/api/user", userRoutes);
-
 app.use("/api/razorpay", razorpayRoutes);
 
 // Global Error Handler

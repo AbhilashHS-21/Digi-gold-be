@@ -81,6 +81,7 @@ model User {
   fixed_sips    FixedSip[]
   flexible_sips FlexibleSip[]
   notifications Notification[]
+  market_status_updates MarketStatus[]
 
   @@index([created_by])
 }
@@ -248,4 +249,12 @@ model Notification {
   user User @relation(fields: [user_id], references: [id])
 
   @@index([user_id])
+}
+
+model MarketStatus {
+  id        String   @id @default(cuid())
+  status    String   // "open" or "closed"
+  message   String?
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
 }
