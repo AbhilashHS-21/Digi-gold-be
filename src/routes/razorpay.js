@@ -2,6 +2,8 @@ import express from 'express';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import { authMiddleware } from '../middlewares/authMiddleware.js';
+import { processOnlineTransaction } from '../services/transactionService.js';
+import { checkMarketStatus } from '../middlewares/marketStatusMiddleware.js';
 
 const router = express.Router();
 
@@ -18,7 +20,7 @@ const razorpay = new Razorpay({
 
 // In your razorpay.js backend file, update the create-order route:
 
-router.post('/create-order', authMiddleware, async (req, res) => {
+router.post('/create-order', authMiddleware, checkMarketStatus, async (req, res) => {
     try {
         const { amount, metalType, sipMonths, sipType, sipId } = req.body;
         const userId = req.user.id;
@@ -46,7 +48,7 @@ router.post('/create-order', authMiddleware, async (req, res) => {
         // FIX: Generate a shorter receipt ID (max 40 characters)
         const timestamp = Date.now();
         const shortSipId = sipId.substring(0, 10); // Take first 10 chars of SIP ID
-        const receipt = `sip_${shortSipId}_${timestamp}.substring(0, 40)`; // Ensure max 40 chars
+        const receipt = `sip_${shortSipId}_${timestamp}`.substring(0, 40); // Ensure max 40 chars
 
         console.log('📝 Generated receipt:', receipt, 'Length:', receipt.length);
 
@@ -148,8 +150,6 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
         }
 
         // Amount verification
-        // In verifyPayment function, update the amount verification section:
-        // Amount verification
         const receivedAmount = payment.amount / 100; // This converts from paise to rupees
         if (Math.abs(receivedAmount - amount) > 0.01) { // Allow small floating point differences
             console.error('❌ Amount mismatch:', {
@@ -166,9 +166,40 @@ router.post('/verify-payment', authMiddleware, async (req, res) => {
 
         console.log('✅ Payment verified successfully');
 
+        // Process the transaction using the shared service
+        // Extract details from notes if available or request body
+        // Only payment_capture: 1 creates a payment that is captured.
+        console.log(req.body.sipId, req.body.sipType, req.body.metalType);
+        console.log(payment.notes.sipId, payment.notes.sipType, payment.notes.metalType);
+        try {
+            console.log("Processing online transaction...");
+            await processOnlineTransaction({
+                userId,
+                amount: receivedAmount,
+                utr_no: razorpay_payment_id, // Use Payment ID as UTR
+                sip_id: req.body.sipId || payment.notes.sipId,
+                sip_type: (req.body.sipType || payment.notes.sipType)?.toUpperCase() || null,
+                metal_type: req.body.metalType || payment.notes.metalType || null,
+                transaction_type: 'ONLINE',
+                category: 'CREDIT'
+            });
+            console.log("Online transaction processed successfully");
+        } catch (txError) {
+            console.error('❌ Error recording transaction:', txError);
+            // Even if recording fails, payment is successful at Razorpay. 
+            // Ideally we should log this critical failure or retry.
+            // For now, returning verification success but with a warning or error might be confusing.
+            // We will return 500 because the user didn't get what they paid for.
+            return res.status(500).json({
+                success: false,
+                error: 'Payment verified but transaction recording failed',
+                message: txError.message
+            });
+        }
+
         res.json({
             success: true,
-            message: 'Payment verified successfully',
+            message: 'Payment verified and processed successfully',
             payment: {
                 orderId: razorpay_order_id,
                 paymentId: razorpay_payment_id,

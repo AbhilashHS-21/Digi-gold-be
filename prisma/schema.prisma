@@ -249,3 +249,13 @@ model Notification {
 
   @@index([user_id])
 }
+
+//
+// SYSTEM SETTINGS TABLE
+//
+model SystemSetting {
+  id         String   @id @default(uuid())
+  key        String   @unique // e.g., 'MARKET_STATUS'
+  value      String // 'AUTO', 'OPEN', 'CLOSED'
+  updated_at DateTime @updatedAt
+}

@@ -1,6 +1,7 @@
 import prisma from "../config/db.js";
 import { addMonths, addMinutes } from "date-fns";
 import { sendEmail } from "../utils/emailService.js";
+import { processOnlineTransaction } from "../services/transactionService.js";
 
 export const sellGold = async (req, res) => {
   try {
@@ -232,7 +233,8 @@ export const addTransaction = async (req, res) => {
 
     // 1️ IDENTIFY INTENT
     const isSip = !!sip_id;
-    const isGoldBuy = !!metal_type;
+    // Strict separation: Gold Buy only if metal_type exists AND it's NOT a SIP
+    const isGoldBuy = !!metal_type && !isSip;
     const isOffline = transaction_type === "OFFLINE";
 
     // 2️ COMMON: OFFLINE PRE-CHECK (OTP Generation)
@@ -246,6 +248,7 @@ export const addTransaction = async (req, res) => {
       const user = await prisma.user.findUnique({ where: { id: userId }, select: { email: true, username: true } });
 
       if (!admin || !admin.email) return res.status(500).json({ message: "Admin contact not found" });
+      console.log(sip_id);
 
       // Calculate execution_qty if Gold Buy (Locking price at booking?? Or just storing intent?)
       // Let's current price lock for fairness if they pay immediately via offline method (e.g. UPI).
@@ -283,125 +286,38 @@ export const addTransaction = async (req, res) => {
           category: category || "CREDIT",
           otp,
           otp_expires_at,
-          sip_id,
-          sip_type,
-          metal_type: metal_type || null,
-          execution_qty, // Store calculated qty
+          sip_id: isSip ? sip_id : null,
+          sip_type: isSip ? sip_type : null,
+          metal_type: isSip ? null : metal_type, // Strict validation
+          execution_qty: isSip ? null : execution_qty,
         },
       });
+      console.log(newTx);
 
       return res.status(201).json({ message: "Offline payment initiated. Ask Admin for OTP.", tr_id: newTx.tr_id });
     }
 
-    // 3️ ONLINE PROCESSING (Immediate)
-    const result = await prisma.$transaction(async (tx) => {
-      let resultData = {};
-
-      // A. SIP PAYMENT
-      if (isSip) {
-        if (!["FIXED", "FLEXIBLE"].includes(sip_type)) throw new Error("Invalid SIP type");
-
-        let sip;
-        if (sip_type === "FIXED") {
-          sip = await tx.fixedSip.findUnique({ where: { id: sip_id }, include: { sipPlanAdmin: true } });
-        } else {
-          sip = await tx.flexibleSip.findUnique({ where: { id: sip_id } });
-        }
-
-        if (!sip || sip.user_id !== userId) throw new Error("SIP not found or unauthorized");
-        if (sip.status === "COMPLETED") throw new Error("SIP already completed");
-
-        // Update SIP
-        let updatedSip;
-        if (sip_type === "FIXED") {
-          const newMonthsPaid = sip.months_paid + 1;
-          const newTotalAmount = Number(sip.total_amount_paid) + Number(amount);
-          const totalMonths = sip.sipPlanAdmin.total_months;
-          updatedSip = await tx.fixedSip.update({
-            where: { id: sip_id },
-            data: {
-              months_paid: newMonthsPaid,
-              total_amount_paid: newTotalAmount,
-              status: newMonthsPaid >= totalMonths ? "COMPLETED" : "ACTIVE",
-              next_due_date: newMonthsPaid >= totalMonths ? null : addMonths(new Date(), 1),
-              has_delayed_payment: sip.has_delayed_payment || new Date() > new Date(sip.next_due_date),
-            },
-          });
-
-          // Notify Admin for 12th month bonus
-          if (newMonthsPaid === 11 && totalMonths === 12) {
-            const admin = await tx.user.findFirst({ where: { user_type: "admin" } });
-            if (admin) {
-              const hasDelayed = updatedSip.has_delayed_payment;
-              await tx.notification.create({
-                data: {
-                  user_id: admin.id,
-                  title: "SIP Bonus Payment Due",
-                  message: `User ${userId} has completed 11 months of Fixed SIP ${sip_id}. Please pay the 12th month bonus. User Delayed Payment: ${hasDelayed ? "Yes" : "No"}`,
-                  type: "SIP_BONUS",
-                },
-              });
-            }
-          }
-        } else {
-          const newMonthsPaid = sip.months_paid + 1;
-          const newTotalAmount = Number(sip.total_amount_paid) + Number(amount);
-          updatedSip = await tx.flexibleSip.update({
-            where: { id: sip_id },
-            data: {
-              months_paid: newMonthsPaid,
-              total_amount_paid: newTotalAmount,
-              status: newMonthsPaid >= sip.total_months ? "COMPLETED" : "ACTIVE",
-              next_due_date: newMonthsPaid >= sip.total_months ? null : addMonths(new Date(), 1),
-            },
-          });
-        }
-        resultData.updatedSip = updatedSip;
-      }
-
-      // B. GOLD BUY (HOLDINGS)
-      else if (isGoldBuy) {
-        const latestPrice = await tx.adminPrice.findFirst({ orderBy: { updated_at: "desc" } });
-        if (!latestPrice || !latestPrice[metal_type]) throw new Error("Price unavailable");
-
-        const qty = Number(amount) / Number(latestPrice[metal_type]); // Calculate Qty
-
-        // Upsert Holding
-        const existing = await tx.holding.findFirst({ where: { user_id: userId, metal_type } });
-        let updatedHolding;
-        if (existing) {
-          updatedHolding = await tx.holding.update({
-            where: { id: existing.id },
-            data: { amt: { increment: amount }, qty: { increment: qty }, updated_at: new Date() }
-          });
-        } else {
-          updatedHolding = await tx.holding.create({
-            data: { user_id: userId, metal_type, amt: amount, qty: qty }
-          });
-        }
-        resultData.updatedHolding = updatedHolding;
-        resultData.execution_qty = qty;
-      }
-
-      // Create Success Transaction
-      const newTx = await tx.transaction.create({
-        data: {
-          user_id: userId,
-          transaction_amt: amount,
-          transaction_type: transaction_type || "ONLINE", // SIP or ONLINE
-          utr_no,
-          transaction_status: "SUCCESS",
-          category: category || "CREDIT",
-          sip_id: sip_id || null,
-          sip_type: sip_type || null,
-          metal_type: metal_type || null,
-          execution_qty: resultData.execution_qty || null
-        },
-      });
-      resultData.transaction = newTx;
-
-      return resultData;
+    // 3️⃣ ONLINE PROCESSING (Immediate)
+    // Use the shared service for processing online transactions
+    if (!isSip && !isGoldBuy) {
+      throw new Error("Invalid transaction intent");
+    }
+    console.log("Online transaction processing...");
+    const result = await processOnlineTransaction({
+      userId,
+      amount,
+      utr_no,
+      sip_id,
+      sip_type,
+      metal_type,
+      category,
+      transaction_type: transaction_type || "ONLINE"
     });
+    console.log(result);
+    return res.status(201).json({ message: "Transaction successful", ...result });
+
+    // Note: The original large transaction block has been moved to services/transactionService.js
+    // to allow reuse by Razorpay webhook/verification flow.
 
     res.status(201).json({ message: "Transaction successful", ...result });
 
@@ -416,6 +332,7 @@ export const verifyOfflineTransaction = async (req, res) => {
     const { tr_id, otp } = req.body;
 
     const transaction = await prisma.transaction.findUnique({ where: { tr_id } });
+    console.log("Transaction found:===================");
     console.log(transaction);
     if (!transaction) return res.status(404).json({ message: "Transaction not found" });
     if (transaction.transaction_type !== "OFFLINE") return res.status(400).json({ message: "Not an offline transaction" });
@@ -432,7 +349,9 @@ export const verifyOfflineTransaction = async (req, res) => {
         const { sip_id, sip_type, transaction_amt } = transaction;
         let sip;
         if (sip_type === "FIXED") {
+          console.log(sip_id);
           sip = await tx.fixedSip.findUnique({ where: { id: sip_id }, include: { sipPlanAdmin: true } });
+          console.log(sip);
           if (sip) {
             const newMonths = sip.months_paid + 1;
             const newTotal = Number(sip.total_amount_paid) + Number(transaction_amt);
@@ -448,6 +367,7 @@ export const verifyOfflineTransaction = async (req, res) => {
                 has_delayed_payment: isDelayed
               }
             });
+            console.log(updatedSip);
 
             // Notify Admin for 12th month bonus
             if (newMonths === 11 && sip.sipPlanAdmin.total_months === 12) {
@@ -509,6 +429,8 @@ export const verifyOfflineTransaction = async (req, res) => {
 
       return updatedTx;
     });
+    console.log("Offline transaction verified successfully");
+    console.log("=============", result);
 
     res.status(200).json({ message: "Offline transaction verified successfully", transaction: result });
   } catch (err) {

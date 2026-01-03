@@ -130,3 +130,43 @@ export const exportData = async (req, res) => {
         res.status(500).json({ success: false, message: 'Failed to export data' });
     }
 };
+
+/**
+ * Update Market Status System Setting
+ * @param {string} status - 'OPEN', 'CLOSED', 'AUTO'
+ */
+export const updateMarketStatus = async (req, res) => {
+    try {
+        const { status } = req.body;
+        if (!['OPEN', 'CLOSED', 'AUTO'].includes(status)) {
+            return res.status(400).json({ message: "Invalid status. Use OPEN, CLOSED, or AUTO." });
+        }
+
+        const setting = await prisma.systemSetting.upsert({
+            where: { key: "MARKET_STATUS" },
+            update: { value: status },
+            create: { key: "MARKET_STATUS", value: status },
+        });
+
+        res.json({ message: "Market status updated", setting });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to update market status" });
+    }
+};
+
+/**
+ * Get Current Market Status
+ */
+export const getMarketStatus = async (req, res) => {
+    try {
+        const setting = await prisma.systemSetting.findUnique({
+            where: { key: "MARKET_STATUS" },
+        });
+
+        res.json({ status: setting?.value || "AUTO" });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: "Failed to fetch market status" });
+    }
+};
