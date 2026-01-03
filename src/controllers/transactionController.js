@@ -1,4 +1,3 @@
-// controllers/transactionController.js
 import prisma from "../config/db.js";
 import { addMonths, addMinutes } from "date-fns";
 import { sendEmail } from "../utils/emailService.js";
@@ -93,12 +92,12 @@ export const paySipInstallment = async (req, res) => {
     // 1️⃣ Fetch SIP details
     let sip;
     if (sip_type === "FIXED") {
-      sip = await tx.fixedSip.findUnique({
+      sip = await tx.fixed_sips.findUnique({
         where: { id: sip_id },
         include: { sipPlanAdmin: true },
       });
     } else {
-      sip = await tx.flexibleSip.findUnique({ where: { id: sip_id } });
+      sip = await tx.flexible_sips.findUnique({ where: { id: sip_id } });
     }
 
     if (!sip || sip.user_id !== userId) {
@@ -110,7 +109,7 @@ export const paySipInstallment = async (req, res) => {
     }
 
     // 2️⃣ Create transaction (initially as PENDING)
-    const transaction = await tx.transaction.create({
+    const transaction = await tx.transactions.create({
       data: {
         user_id: userId,
         transaction_amt: amount,
@@ -132,7 +131,7 @@ export const paySipInstallment = async (req, res) => {
         const totalMonths = sip.sipPlanAdmin.total_months;
         const isCompleted = newMonthsPaid >= totalMonths;
 
-        updatedSip = await tx.fixedSip.update({
+        updatedSip = await tx.fixed_sips.update({
           where: { id: sip_id },
           data: {
             months_paid: newMonthsPaid,
@@ -146,7 +145,7 @@ export const paySipInstallment = async (req, res) => {
         const newTotalAmount = sip.total_amount_paid + amount;
         const isCompleted = newMonthsPaid >= sip.total_months;
 
-        updatedSip = await tx.flexibleSip.update({
+        updatedSip = await tx.flexible_sips.update({
           where: { id: sip_id },
           data: {
             months_paid: newMonthsPaid,
@@ -158,7 +157,7 @@ export const paySipInstallment = async (req, res) => {
       }
 
       // 4️⃣ Mark transaction as SUCCESS
-      const successTx = await tx.transaction.update({
+      const successTx = await tx.transactions.update({
         where: { tr_id: transaction.tr_id },
         data: { transaction_status: "SUCCESS" },
       });
@@ -166,7 +165,7 @@ export const paySipInstallment = async (req, res) => {
       return { transaction: successTx, updatedSip };
     } catch (err) {
       // 5️⃣ Mark transaction as FAILED
-      await tx.transaction.update({
+      await tx.transactions.update({
         where: { tr_id: transaction.tr_id },
         data: { transaction_status: "FAILED" },
       });
@@ -410,7 +409,7 @@ export const addTransaction = async (req, res) => {
     console.error(err);
     res.status(500).json({ message: err.message });
   }
-};
+}
 
 export const verifyOfflineTransaction = async (req, res) => {
   try {
@@ -516,321 +515,4 @@ export const verifyOfflineTransaction = async (req, res) => {
     console.error(err);
     res.status(500).json({ message: err.message });
   }
-};
-
-// Add the missing functions for createTransaction and buyMetal
-export const createTransaction = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { 
-      amount, 
-      utr_no, 
-      transaction_type = "ONLINE", 
-      category = "CREDIT", 
-      sip_id, 
-      sip_type, 
-      metal_type,
-      grams 
-    } = req.body;
-
-    // Check market status
-    if (!req.isMarketOpen) {
-      return res.status(403).json({
-        success: false,
-        message: `Market is closed. Trading hours: ${req.marketOpenTime || '10:00'} to ${req.marketCloseTime || '18:00'}`
-      });
-    }
-
-    // Validate required fields
-    if (!amount || amount <= 0) {
-      return res.status(400).json({ 
-        success: false, 
-        message: "Invalid amount" 
-      });
-    }
-
-    // Handle different transaction types
-    let result;
-    if (metal_type && grams) {
-      // Gold/Silver purchase
-      result = await handleMetalPurchase(userId, amount, metal_type, grams, transaction_type, utr_no);
-    } else if (sip_id && sip_type) {
-      // SIP payment
-      result = await handleSipPayment(userId, amount, sip_id, sip_type, transaction_type, utr_no);
-    } else {
-      // General transaction
-      result = await handleGeneralTransaction(userId, amount, transaction_type, utr_no, category);
-    }
-
-    res.status(201).json({
-      success: true,
-      message: "Transaction created successfully",
-      data: result
-    });
-
-  } catch (error) {
-    console.error('Error creating transaction:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to create transaction"
-    });
-  }
-};
-
-export const buyMetal = async (req, res) => {
-  try {
-    const userId = req.user.id;
-    const { 
-      metal_type, 
-      amount, 
-      grams,
-      transaction_type = "ONLINE",
-      utr_no 
-    } = req.body;
-
-    // Check market status
-    if (!req.isMarketOpen) {
-      return res.status(403).json({
-        success: false,
-        message: `Market is closed. Trading hours: ${req.marketOpenTime || '10:00'} to ${req.marketCloseTime || '18:00'}`
-      });
-    }
-
-    // Validate required fields
-    if (!metal_type || !amount || amount <= 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Metal type and amount are required"
-      });
-    }
-
-    // Calculate grams if not provided
-    let calculatedGrams = grams;
-    if (!calculatedGrams) {
-      const latestPrice = await prisma.adminPrice.findFirst({
-        orderBy: { updated_at: "desc" },
-      });
-
-      if (!latestPrice || !latestPrice[metal_type]) {
-        return res.status(400).json({
-          success: false,
-          message: "Current price not available for this metal"
-        });
-      }
-
-      calculatedGrams = (amount / Number(latestPrice[metal_type])).toFixed(4);
-    }
-
-    // Create transaction
-    const result = await handleMetalPurchase(
-      userId, 
-      amount, 
-      metal_type, 
-      calculatedGrams, 
-      transaction_type, 
-      utr_no
-    );
-
-    res.status(201).json({
-      success: true,
-      message: "Metal purchase successful",
-      data: result
-    });
-
-  } catch (error) {
-    console.error('Error buying metal:', error);
-    res.status(500).json({
-      success: false,
-      message: error.message || "Failed to buy metal"
-    });
-  }
-};
-
-// Helper functions
-const handleMetalPurchase = async (userId, amount, metal_type, grams, transaction_type, utr_no) => {
-  return await prisma.$transaction(async (tx) => {
-    // Get latest price
-    const latestPrice = await tx.adminPrice.findFirst({
-      orderBy: { updated_at: "desc" },
-    });
-
-    if (!latestPrice || !latestPrice[metal_type]) {
-      throw new Error("Current price not available");
-    }
-
-    const price = Number(latestPrice[metal_type]);
-    const calculatedGrams = grams || (amount / price).toFixed(4);
-
-    // Create transaction record
-    const transaction = await tx.transaction.create({
-      data: {
-        user_id: userId,
-        transaction_amt: amount,
-        transaction_type: transaction_type,
-        utr_no: utr_no || `TX-${Date.now()}-${userId}`,
-        transaction_status: "SUCCESS",
-        category: "DEBIT",
-        metal_type: metal_type,
-        execution_qty: calculatedGrams,
-      },
-    });
-
-    // Update or create holding
-    const existingHolding = await tx.holding.findFirst({
-      where: {
-        user_id: userId,
-        metal_type: metal_type,
-      },
-    });
-
-    if (existingHolding) {
-      await tx.holding.update({
-        where: { id: existingHolding.id },
-        data: {
-          amt: { increment: amount },
-          qty: { increment: calculatedGrams },
-          updated_at: new Date(),
-        },
-      });
-    } else {
-      await tx.holding.create({
-        data: {
-          user_id: userId,
-          metal_type: metal_type,
-          amt: amount,
-          qty: calculatedGrams,
-        },
-      });
-    }
-
-    // Update user's current holdings
-    await tx.user.update({
-      where: { id: userId },
-      data: {
-        current_holdings: { increment: amount },
-        updated_at: new Date(),
-      },
-    });
-
-    return {
-      transaction,
-      grams: calculatedGrams,
-      price,
-      totalAmount: amount,
-    };
-  });
-};
-
-const handleSipPayment = async (userId, amount, sip_id, sip_type, transaction_type, utr_no) => {
-  return await prisma.$transaction(async (tx) => {
-    // Validate SIP type
-    if (!["FIXED", "FLEXIBLE"].includes(sip_type)) {
-      throw new Error("Invalid SIP type");
-    }
-
-    // Get SIP details
-    let sip;
-    if (sip_type === "FIXED") {
-      sip = await tx.fixedSip.findUnique({
-        where: { id: sip_id },
-        include: { sipPlanAdmin: true },
-      });
-    } else {
-      sip = await tx.flexibleSip.findUnique({
-        where: { id: sip_id },
-      });
-    }
-
-    if (!sip || sip.user_id !== userId) {
-      throw new Error("SIP not found or unauthorized");
-    }
-
-    if (sip.status === "COMPLETED") {
-      throw new Error("SIP already completed");
-    }
-
-    // Create transaction
-    const transaction = await tx.transaction.create({
-      data: {
-        user_id: userId,
-        transaction_amt: amount,
-        transaction_type: "SIP",
-        utr_no: utr_no || `SIP-${Date.now()}-${userId}`,
-        sip_id,
-        sip_type,
-        transaction_status: "SUCCESS",
-        category: "CREDIT",
-      },
-    });
-
-    // Update SIP
-    let updatedSip;
-    if (sip_type === "FIXED") {
-      const newMonthsPaid = (sip.months_paid || 0) + 1;
-      const newTotalAmount = (Number(sip.total_amount_paid) || 0) + Number(amount);
-      const totalMonths = sip.sipPlanAdmin?.total_months || 12;
-      const isCompleted = newMonthsPaid >= totalMonths;
-
-      updatedSip = await tx.fixedSip.update({
-        where: { id: sip_id },
-        data: {
-          months_paid: newMonthsPaid,
-          total_amount_paid: newTotalAmount,
-          status: isCompleted ? "COMPLETED" : "ACTIVE",
-          next_due_date: isCompleted ? null : addMonths(new Date(), 1),
-          has_delayed_payment: sip.has_delayed_payment || new Date() > new Date(sip.next_due_date),
-        },
-      });
-
-      // Notify admin for 12th month bonus
-      if (newMonthsPaid === 11 && totalMonths === 12) {
-        const admin = await tx.user.findFirst({ where: { user_type: "admin" } });
-        if (admin) {
-          await tx.notification.create({
-            data: {
-              user_id: admin.id,
-              title: "SIP Bonus Payment Due",
-              message: `User ${userId} has completed 11 months of Fixed SIP ${sip_id}. Please pay the 12th month bonus.`,
-              type: "SIP_BONUS",
-            },
-          });
-        }
-      }
-    } else {
-      const newMonthsPaid = (sip.months_paid || 0) + 1;
-      const newTotalAmount = (Number(sip.total_amount_paid) || 0) + Number(amount);
-      const totalMonths = sip.total_months || 12;
-      const isCompleted = newMonthsPaid >= totalMonths;
-
-      updatedSip = await tx.flexibleSip.update({
-        where: { id: sip_id },
-        data: {
-          months_paid: newMonthsPaid,
-          total_amount_paid: newTotalAmount,
-          status: isCompleted ? "COMPLETED" : "ACTIVE",
-          next_due_date: isCompleted ? null : addMonths(new Date(), 1),
-        },
-      });
-    }
-
-    return {
-      transaction,
-      updatedSip,
-    };
-  });
-};
-
-const handleGeneralTransaction = async (userId, amount, transaction_type, utr_no, category) => {
-  const transaction = await prisma.transaction.create({
-    data: {
-      user_id: userId,
-      transaction_amt: amount,
-      transaction_type: transaction_type,
-      utr_no: utr_no || `GEN-${Date.now()}-${userId}`,
-      transaction_status: "SUCCESS",
-      category: category,
-    },
-  });
-
-  return { transaction };
 };

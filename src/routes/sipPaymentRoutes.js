@@ -1,8 +1,8 @@
-// routes/sipPaymentRoutes.js
 import express from "express";
-// Remove the named import and use the actual function from your controller
-import { paySipInstallment } from "../controllers/transactionController.js";
-import { getSipTransactions } from '../controllers/transactionController.js';
+import {
+  paySipInstallment,
+  getSipTransactions,
+} from "../controllers/transactionController.js";
 import { authMiddleware } from "../middlewares/authMiddleware.js";
 
 const router = express.Router();
